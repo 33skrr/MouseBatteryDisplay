@@ -94,9 +94,9 @@ namespace MouseBatteryDisplay
                 graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
                 Color accent = AccentColor(percent, charging, connected, stale);
-                Color outlineColor = charging
-                    ? Color.FromArgb(255, 56, 189, 248)
-                    : (stale || !connected ? Color.FromArgb(210, 156, 163, 175) : Color.FromArgb(235, 237, 242, 247));
+                Color outlineColor = stale || !connected
+                    ? Color.FromArgb(220, 120, 126, 138)
+                    : Color.FromArgb(255, 10, 12, 17);
                 float outlineWidth = Math.Max(1f, size / 32f);
 
                 // A top-down mouse silhouette: rounded body, two buttons and a scroll wheel.
@@ -115,7 +115,9 @@ namespace MouseBatteryDisplay
                 RectangleF body = new RectangleF(bodyX, bodyY, bodyWidth, bodyHeight);
                 using (GraphicsPath bodyPath = RoundedRectangle(body, bodyWidth * 0.48f))
                 {
-                    using (SolidBrush bodyFill = new SolidBrush(Color.FromArgb(245, 20, 22, 27)))
+                    using (SolidBrush bodyFill = new SolidBrush(stale || !connected
+                        ? Color.FromArgb(245, 96, 100, 110)
+                        : Color.FromArgb(250, 234, 238, 244)))
                     {
                         graphics.FillPath(bodyFill, bodyPath);
                     }
@@ -126,7 +128,7 @@ namespace MouseBatteryDisplay
                         float innerHeight = Math.Max(1f, body.Height - (outlineWidth * 2f));
                         float fillHeight = Math.Max(1.5f, innerHeight * (value / 100f));
                         graphics.SetClip(bodyPath);
-                        using (SolidBrush batteryFill = new SolidBrush(Color.FromArgb(135, accent)))
+                        using (SolidBrush batteryFill = new SolidBrush(Color.FromArgb(32, accent)))
                         {
                             graphics.FillRectangle(
                                 batteryFill,
@@ -167,7 +169,7 @@ namespace MouseBatteryDisplay
                     wheelWidth,
                     wheelHeight);
                 using (GraphicsPath wheelPath = RoundedRectangle(wheel, wheelWidth / 2f))
-                using (SolidBrush wheelFill = new SolidBrush(Color.FromArgb(245, 239, 243, 248)))
+                using (SolidBrush wheelFill = new SolidBrush(Color.FromArgb(255, 28, 31, 38)))
                 using (Pen wheelPen = new Pen(Color.FromArgb(210, 237, 242, 247), Math.Max(1f, outlineWidth * 0.7f)))
                 {
                     graphics.FillPath(wheelFill, wheelPath);
@@ -182,10 +184,15 @@ namespace MouseBatteryDisplay
                 float screenInset = size <= 20 ? 1f : Math.Max(2f, size * 0.075f);
                 float screenX = body.X + screenInset;
                 float screenWidth = Math.Max(6f, body.Width - (screenInset * 2f));
+                float barHeight = Math.Max(2f, size * 0.07f);
+                float bottomInset = size <= 20 ? 1f : Math.Max(2f, size * 0.08f);
+                float barY = body.Bottom - bottomInset - barHeight;
                 float screenHeight = size <= 20
-                    ? 7f
-                    : Math.Min(body.Height * 0.40f, size * 0.36f);
-                float screenY = body.Bottom - screenHeight - Math.Max(2f, size * 0.075f);
+                    ? 5.5f
+                    : Math.Min(body.Height * 0.34f, size * 0.30f);
+                float screenY = size <= 20
+                    ? 6f
+                    : barY - 1f - screenHeight;
 
                 RectangleF screen = new RectangleF(screenX, screenY, screenWidth, screenHeight);
                 using (GraphicsPath screenPath = RoundedRectangle(screen, Math.Max(1f, screenHeight * 0.22f)))
@@ -194,6 +201,27 @@ namespace MouseBatteryDisplay
                 {
                     graphics.FillPath(screenFill, screenPath);
                     graphics.DrawPath(screenPen, screenPath);
+                }
+
+                // Thin battery gauge at the bottom of the mouse body.
+                float barX = screenX + size * 0.04f;
+                float barWidth = Math.Max(4f, body.Width - (2f * (screenInset + size * 0.04f)));
+                using (SolidBrush barTrack = new SolidBrush(Color.FromArgb(95, 10, 12, 17)))
+                {
+                    graphics.FillRectangle(barTrack, barX, barY, barWidth, barHeight);
+                }
+                if (percent.HasValue)
+                {
+                    int barValue = Math.Max(0, Math.Min(100, percent.Value));
+                    float barFillWidth = barWidth * (barValue / 100f);
+                    if (barValue > 0 && barFillWidth < 1f) barFillWidth = 1f;
+                    if (barFillWidth > 0)
+                    {
+                        using (SolidBrush barFill = new SolidBrush(accent))
+                        {
+                            graphics.FillRectangle(barFill, barX, barY, barFillWidth, barHeight);
+                        }
+                    }
                 }
 
                 if (size <= 20)
