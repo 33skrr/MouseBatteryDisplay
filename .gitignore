@@ -1,0 +1,12 @@
+# Build helpers / temporary files
+tools/IconGen.exe
+*.pdb
+*.log
+.vs/
+bin/
+obj/
+*.tmp
+
+# OS metadata
+desktop.ini
+Thumbs.db
