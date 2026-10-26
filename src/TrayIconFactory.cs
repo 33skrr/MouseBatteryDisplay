@@ -33,7 +33,7 @@ namespace MouseBatteryDisplay
             {
                 foreach (int size in IconSizes)
                 {
-                    frames.Add(DrawBadge(size, percent, charging, connected, stale));
+                    frames.Add(DrawMouseIcon(size, percent, charging, connected, stale));
                 }
 
                 using (MemoryStream stream = new MemoryStream())
@@ -68,7 +68,7 @@ namespace MouseBatteryDisplay
             {
                 foreach (int size in IconSizes)
                 {
-                    frames.Add(DrawBadge(size, percent, charging, connected, stale));
+                    frames.Add(DrawMouseIcon(size, percent, charging, connected, stale));
                 }
                 using (FileStream stream = new FileStream(path, FileMode.Create, FileAccess.Write))
                 {
@@ -84,7 +84,7 @@ namespace MouseBatteryDisplay
             }
         }
 
-        private static Bitmap DrawBadge(int size, int? percent, bool charging, bool connected, bool stale)
+        private static Bitmap DrawMouseIcon(int size, int? percent, bool charging, bool connected, bool stale)
         {
             Bitmap bitmap = new Bitmap(size, size, PixelFormat.Format32bppArgb);
             using (Graphics graphics = Graphics.FromImage(bitmap))
@@ -93,73 +93,168 @@ namespace MouseBatteryDisplay
                 graphics.SmoothingMode = SmoothingMode.AntiAlias;
                 graphics.PixelOffsetMode = PixelOffsetMode.HighQuality;
 
-                int scale = Math.Max(1, (int)Math.Round(size / 16.0));
-                int pad = Math.Max(1, size / 32);
-                float radius = Math.Max(2f, size * 0.18f);
-
                 Color accent = AccentColor(percent, charging, connected, stale);
-                Color border = charging
-                    ? Color.FromArgb(235, 56, 189, 248)
-                    : (stale || !connected ? Color.FromArgb(190, 156, 163, 175) : Color.FromArgb(220, 229, 231, 235));
+                Color outlineColor = charging
+                    ? Color.FromArgb(255, 56, 189, 248)
+                    : (stale || !connected ? Color.FromArgb(210, 156, 163, 175) : Color.FromArgb(235, 237, 242, 247));
+                float outlineWidth = Math.Max(1f, size / 32f);
 
-                RectangleF badge = new RectangleF(
-                    pad,
-                    pad,
-                    size - (pad * 2) - 1,
-                    size - (pad * 2) - 1);
-
-                using (GraphicsPath path = RoundedRectangle(badge, radius))
-                using (SolidBrush fill = new SolidBrush(Color.FromArgb(238, 17, 19, 23)))
-                using (Pen outline = new Pen(border, Math.Max(1f, size / 32f)))
+                // A top-down mouse silhouette: rounded body, two buttons and a scroll wheel.
+                float bodyWidth = size * 0.64f;
+                float bodyHeight = size * 0.90f;
+                float bodyX = (size - bodyWidth) / 2f;
+                float bodyY = (size - bodyHeight) / 2f;
+                if (size <= 20)
                 {
-                    graphics.FillPath(fill, path);
-                    graphics.DrawPath(outline, path);
+                    bodyWidth = size - 6f;
+                    bodyHeight = size - 2f;
+                    bodyX = 3f;
+                    bodyY = 1f;
                 }
 
-                int barHeight = Math.Max(2, scale * 2);
-                int barY = size - pad - barHeight - scale;
-                int barX = pad + scale * 2;
-                int barWidth = size - ((barX) * 2);
-                if (barWidth < 4)
+                RectangleF body = new RectangleF(bodyX, bodyY, bodyWidth, bodyHeight);
+                using (GraphicsPath bodyPath = RoundedRectangle(body, bodyWidth * 0.48f))
                 {
-                    barX = pad + 1;
-                    barWidth = size - ((barX) * 2);
-                }
-                if (barWidth < 4) barWidth = 4;
-
-                using (SolidBrush track = new SolidBrush(Color.FromArgb(85, 255, 255, 255)))
-                {
-                    graphics.FillRectangle(track, barX, barY, barWidth, barHeight);
-                }
-
-                int value = percent.HasValue ? Math.Max(0, Math.Min(100, percent.Value)) : 0;
-                int fillWidth = percent.HasValue ? (int)Math.Round(barWidth * (value / 100.0)) : 0;
-                if (percent.HasValue && value > 0 && fillWidth < 1) fillWidth = 1;
-                if (fillWidth > 0)
-                {
-                    using (SolidBrush fillBrush = new SolidBrush(accent))
+                    using (SolidBrush bodyFill = new SolidBrush(Color.FromArgb(245, 20, 22, 27)))
                     {
-                        graphics.FillRectangle(fillBrush, barX, barY, fillWidth, barHeight);
+                        graphics.FillPath(bodyFill, bodyPath);
+                    }
+
+                    int value = percent.HasValue ? Math.Max(0, Math.Min(100, percent.Value)) : 0;
+                    if (percent.HasValue && value > 0)
+                    {
+                        float innerHeight = Math.Max(1f, body.Height - (outlineWidth * 2f));
+                        float fillHeight = Math.Max(1.5f, innerHeight * (value / 100f));
+                        graphics.SetClip(bodyPath);
+                        using (SolidBrush batteryFill = new SolidBrush(Color.FromArgb(135, accent)))
+                        {
+                            graphics.FillRectangle(
+                                batteryFill,
+                                body.X + outlineWidth,
+                                body.Bottom - outlineWidth - fillHeight,
+                                Math.Max(1f, body.Width - (outlineWidth * 2f)),
+                                fillHeight);
+                        }
+                        graphics.ResetClip();
+                    }
+
+                    using (Pen outline = new Pen(outlineColor, outlineWidth))
+                    {
+                        graphics.DrawPath(outline, bodyPath);
                     }
                 }
 
-                string text = percent.HasValue ? percent.Value.ToString() : "--";
-                int glyphWidth = 3 * scale;
-                int glyphHeight = 5 * scale;
-                int gap = scale;
-                int totalWidth = text.Length * glyphWidth + Math.Max(0, text.Length - 1) * gap;
-                int textX = (size - totalWidth) / 2;
-                int textY = (size - glyphHeight) / 2 - scale;
-                if (textY < pad + 1) textY = pad + 1;
+                float centerX = body.X + (body.Width / 2f);
+                float outlineInset = Math.Max(1f, outlineWidth);
 
-                graphics.SmoothingMode = SmoothingMode.None;
-                graphics.PixelOffsetMode = PixelOffsetMode.Half;
-                using (SolidBrush textBrush = new SolidBrush(Color.FromArgb(245, 249, 250, 251)))
+                // Button split.
+                using (Pen split = new Pen(Color.FromArgb(205, 237, 242, 247), Math.Max(1f, outlineWidth * 0.8f)))
                 {
-                    for (int i = 0; i < text.Length; i++)
+                    graphics.DrawLine(
+                        split,
+                        centerX,
+                        body.Top + outlineInset,
+                        centerX,
+                        body.Top + (body.Height * 0.28f));
+                }
+
+                // Scroll wheel.
+                float wheelWidth = Math.Max(2f, size * 0.105f);
+                float wheelHeight = Math.Max(3f, size * 0.155f);
+                RectangleF wheel = new RectangleF(
+                    centerX - (wheelWidth / 2f),
+                    body.Top + (body.Height * 0.105f),
+                    wheelWidth,
+                    wheelHeight);
+                using (GraphicsPath wheelPath = RoundedRectangle(wheel, wheelWidth / 2f))
+                using (SolidBrush wheelFill = new SolidBrush(Color.FromArgb(245, 239, 243, 248)))
+                using (Pen wheelPen = new Pen(Color.FromArgb(210, 237, 242, 247), Math.Max(1f, outlineWidth * 0.7f)))
+                {
+                    graphics.FillPath(wheelFill, wheelPath);
+                    graphics.DrawPath(wheelPen, wheelPath);
+                }
+
+                string text = percent.HasValue
+                    ? (size <= 20 && percent.Value >= 100 ? "99" : percent.Value.ToString())
+                    : "--";
+
+                // Small dark display on the mouse back for the percentage.
+                float screenInset = size <= 20 ? 1f : Math.Max(2f, size * 0.075f);
+                float screenX = body.X + screenInset;
+                float screenWidth = Math.Max(6f, body.Width - (screenInset * 2f));
+                float screenHeight = size <= 20
+                    ? 7f
+                    : Math.Min(body.Height * 0.40f, size * 0.36f);
+                float screenY = body.Bottom - screenHeight - Math.Max(2f, size * 0.075f);
+
+                RectangleF screen = new RectangleF(screenX, screenY, screenWidth, screenHeight);
+                using (GraphicsPath screenPath = RoundedRectangle(screen, Math.Max(1f, screenHeight * 0.22f)))
+                using (SolidBrush screenFill = new SolidBrush(Color.FromArgb(230, 10, 12, 16)))
+                using (Pen screenPen = new Pen(Color.FromArgb(150, outlineColor), Math.Max(1f, outlineWidth * 0.7f)))
+                {
+                    graphics.FillPath(screenFill, screenPath);
+                    graphics.DrawPath(screenPen, screenPath);
+                }
+
+                if (size <= 20)
+                {
+                    int glyphWidth = 3;
+                    int glyphHeight = 5;
+                    int gap = 1;
+                    int totalWidth = text.Length * glyphWidth + Math.Max(0, text.Length - 1) * gap;
+                    int textX = (int)Math.Round(screen.X + ((screen.Width - totalWidth) / 2f));
+                    int textY = (int)Math.Round(screen.Y + ((screen.Height - glyphHeight) / 2f));
+                    graphics.SmoothingMode = SmoothingMode.None;
+                    graphics.PixelOffsetMode = PixelOffsetMode.Half;
+                    using (SolidBrush textBrush = new SolidBrush(Color.FromArgb(250, 249, 250, 251)))
                     {
-                        int x = textX + i * (glyphWidth + gap);
-                        DrawGlyph(graphics, textBrush, text[i], x, textY, scale);
+                        for (int i = 0; i < text.Length; i++)
+                        {
+                            DrawGlyph(graphics, textBrush, text[i], textX + i * (glyphWidth + gap), textY, 1);
+                        }
+                    }
+                }
+                else
+                {
+                    float fontSize = Math.Max(6.5f, size * 0.30f);
+                    Font font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+                    try
+                    {
+                        SizeF measured = graphics.MeasureString(text, font);
+                        float maxWidth = screen.Width - Math.Max(1f, size * 0.05f);
+                        while (measured.Width > maxWidth && fontSize > 6f)
+                        {
+                            fontSize -= 0.5f;
+                            font.Dispose();
+                            font = new Font("Segoe UI", fontSize, FontStyle.Bold, GraphicsUnit.Pixel);
+                            measured = graphics.MeasureString(text, font);
+                        }
+
+                        using (StringFormat format = new StringFormat())
+                        {
+                            format.Alignment = StringAlignment.Center;
+                            format.LineAlignment = StringAlignment.Center;
+                            RectangleF textRect = new RectangleF(
+                                screen.X,
+                                screen.Y - (size * 0.01f),
+                                screen.Width,
+                                screen.Height);
+                            graphics.TextRenderingHint = System.Drawing.Text.TextRenderingHint.AntiAliasGridFit;
+                            using (SolidBrush shadow = new SolidBrush(Color.FromArgb(200, 0, 0, 0)))
+                            {
+                                RectangleF shadowRect = textRect;
+                                shadowRect.Offset(1f, 1f);
+                                graphics.DrawString(text, font, shadow, shadowRect, format);
+                            }
+                            using (SolidBrush textBrush = new SolidBrush(Color.FromArgb(250, 249, 250, 251)))
+                            {
+                                graphics.DrawString(text, font, textBrush, textRect, format);
+                            }
+                        }
+                    }
+                    finally
+                    {
+                        font.Dispose();
                     }
                 }
             }
@@ -309,3 +404,4 @@ namespace MouseBatteryDisplay
         }
     }
 }
+
