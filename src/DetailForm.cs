@@ -83,6 +83,7 @@ namespace MouseBatteryDisplay
         private readonly Button _refreshButton;
         private readonly CheckBox _autoStartCheckBox;
         private readonly BatteryGauge _gauge;
+        private readonly float _uiScale;
         private bool _updatingAutoStart;
 
         internal DetailForm(BatteryMonitor monitor, Action refreshAction, Action exitAction)
@@ -91,11 +92,13 @@ namespace MouseBatteryDisplay
             _refreshAction = refreshAction;
             _exitAction = exitAction;
 
+            _uiScale = GetUiScale();
             Text = "鼠标电量";
             FormBorderStyle = FormBorderStyle.None;
             ShowInTaskbar = false;
             TopMost = true;
             StartPosition = FormStartPosition.Manual;
+            AutoScaleMode = AutoScaleMode.None;
             ClientSize = new Size(344, 252);
             BackColor = Color.FromArgb(255, 24, 25, 29);
             Font = new Font("Microsoft YaHei UI", 9f, FontStyle.Regular, GraphicsUnit.Point);
@@ -202,7 +205,52 @@ namespace MouseBatteryDisplay
             Controls.Add(_exitLabel);
             Controls.Add(_footerLabel);
 
+            ApplyDpiScale();
             SetStatus(monitor.Current);
+        }
+
+        private static float GetUiScale()
+        {
+            try
+            {
+                uint dpi = NativeMethods.GetDpiForSystem();
+                if (dpi >= 96) return dpi / 96f;
+            }
+            catch
+            {
+            }
+
+            try
+            {
+                using (Graphics graphics = Graphics.FromHwnd(IntPtr.Zero))
+                {
+                    return Math.Max(1f, graphics.DpiX / 96f);
+                }
+            }
+            catch
+            {
+                return 1f;
+            }
+        }
+
+        private void ApplyDpiScale()
+        {
+            if (_uiScale <= 1.01f) return;
+
+            ClientSize = new Size(Scaled(ClientSize.Width), Scaled(ClientSize.Height));
+            foreach (Control control in Controls)
+            {
+                control.Location = new Point(Scaled(control.Left), Scaled(control.Top));
+                if (!control.AutoSize)
+                {
+                    control.Size = new Size(Scaled(control.Width), Scaled(control.Height));
+                }
+            }
+        }
+
+        private int Scaled(int value)
+        {
+            return (int)Math.Round(value * _uiScale);
         }
 
         protected override CreateParams CreateParams
@@ -218,7 +266,7 @@ namespace MouseBatteryDisplay
         protected override void OnResize(EventArgs e)
         {
             base.OnResize(e);
-            using (GraphicsPath path = RoundedRectangle(new Rectangle(0, 0, Width, Height), 12f))
+            using (GraphicsPath path = RoundedRectangle(new Rectangle(0, 0, Width, Height), 12f * _uiScale))
             {
                 Region = new Region(path);
             }
@@ -305,13 +353,16 @@ namespace MouseBatteryDisplay
 
         internal void PositionNearTaskbar()
         {
-            Screen screen = Screen.PrimaryScreen;
+            Screen screen = Screen.FromPoint(Cursor.Position);
+            if (screen == null) screen = Screen.PrimaryScreen;
             Rectangle area = screen.WorkingArea;
             int x = area.Right - Width - 10;
             int y = area.Bottom - Height - 10;
             if (x < area.Left + 10) x = area.Left + 10;
             if (y < area.Top + 10) y = area.Top + 10;
             Location = new Point(x, y);
+            Logger.Info("详情面板: dpi=" + DeviceDpi + " size=" + Width + "x" + Height
+                + " screen=" + area.Width + "x" + area.Height + " location=" + x + "," + y);
         }
 
         private void OnRefreshClick(object sender, EventArgs e)

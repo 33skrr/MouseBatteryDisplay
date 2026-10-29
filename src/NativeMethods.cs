@@ -145,6 +145,9 @@ namespace MouseBatteryDisplay
         internal static extern bool SetProcessDPIAware();
 
         [DllImport("user32.dll")]
+        internal static extern uint GetDpiForSystem();
+
+        [DllImport("user32.dll")]
         internal static extern bool DestroyIcon(IntPtr hIcon);
 
         [DllImport("user32.dll")]
